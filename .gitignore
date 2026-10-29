@@ -1,7 +1,5 @@
-.env
-.env.*
-!.env.example
 .venv/
-venv/
+.env
 __pycache__/
 *.pyc
+reports/
