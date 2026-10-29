@@ -1,0 +1,16 @@
+{
+  "topic": "Robot Manipulation",
+  "papers": [
+    {
+      "title": "Sample Robotics Paper",
+      "year": 2025,
+      "url": "https://example.com/paper",
+      "citations": 10,
+      "summary": "A sample summary used for testing."
+    }
+  ],
+  "key_findings": [
+    "Sample finding"
+  ],
+  "overall_summary": "A test research report."
+}

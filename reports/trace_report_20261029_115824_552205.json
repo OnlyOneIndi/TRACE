@@ -1,0 +1,32 @@
+{
+  "topic": "Intelligent Machines and Artificial Intelligence Systems",
+  "papers": [
+    {
+      "title": "Artificial intelligence, machine learning and deep learning in advanced robotics, a review",
+      "year": 2023,
+      "url": "https://openalex.org/W4362663195",
+      "citations": 1125,
+      "summary": "This review discusses how Artificial Intelligence, Machine Learning, and Deep Learning have revolutionized advanced robotics, making them more adaptable, efficient, and capable of tasks such as autonomous navigation, object recognition, and natural language processing."
+    },
+    {
+      "title": "Introduction to Artificial Intelligence, Machine Learning, and IoT in Intelligent System Development",
+      "year": 2026,
+      "url": "https://openalex.org/W7196975128",
+      "citations": 0,
+      "summary": "This book chapter explores the convergence of Artificial Intelligence, Machine Learning, and the Internet of Things (IoT) in building scalable, adaptive, and autonomous digital ecosystems for real-time monitoring, predictive analysis, and intelligent decision-making across various industries."
+    },
+    {
+      "title": "Intelligent Change Detection System: Autonomous Intelligent Machine Agent Model Development",
+      "year": 2024,
+      "url": "https://openalex.org/W4402687901",
+      "citations": 0,
+      "summary": "This paper presents the development, assessment, and verification of an autonomous intelligent machine agent model designed to assist direct-action aviation personnel and combat information errors caused by change blindness in ground control stations."
+    }
+  ],
+  "key_findings": [
+    "Artificial intelligence, machine learning, and deep learning are driving advancements in advanced robotics, enabling greater adaptability in tasks such as autonomous navigation, object recognition, and human-robot collaboration.",
+    "The integration of AI, machine learning, and IoT forms scalable and adaptive ecosystems that enhance real-time monitoring and decision-making across domains like smart cities and industrial automation.",
+    "Autonomous intelligent machine (AIM) agents and advanced detection systems can successfully mitigate human visual perception errors, such as change blindness, in high-data environments like aviation and ground control stations."
+  ],
+  "overall_summary": "This research overview highlights three recent papers published from 2023 onward focusing on intelligent machines, artificial intelligence, and autonomous systems. These studies explore the transformation of modern robotics via machine learning, the convergence of IoT and AI in intelligent ecosystems, and the design of autonomous intelligent machine agents for complex operational environments."
+}

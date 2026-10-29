@@ -1,60 +1,29 @@
-import os
-import requests
 
-from dotenv import load_dotenv
-from pydantic_ai import Agent
-from research import search_papers
-
-load_dotenv()
-
-agent = Agent(
-    "google:gemini-3.5-flash-lite",
-    instructions=(
-        "You are Trace, a scientific research assistant. "
-        "When asked to find academic research papers, "
-        "use the search_openalex tool. "
-        "Only mention retrieved papers that appear in "
-        "the tool results. Provide their titles, years, "
-        "and source links. Do not invent citations. "
-        "If the search fails, explain the limitation."
-    ),
-)
-
-
-@agent.tool_plain
-def search_openalex(query: str, max_results: int = 3) -> list[dict]:
-    """Search the OpenAlex academic database for research papers.
-
-    Args:
-        query: Keywords describing the research topic.
-        max_results: Number of results to retrieve, from 1 to 10.
-    """
-    print(f"\n[TOOL CALLED] search_openalex")
-    print(f"Query: {query}")
-    print(f"Results requested: {max_results}")
-
-    try:
-        return search_papers(query, max_results)
-
-    except (requests.exceptions.RequestException, ValueError) as error:
-        return [{"error": str(error)}]
+from engine import run_research, ResearchVerificationError
 
 
 def main():
-    question = input("\nTRACE > ").strip()
+    print("\n=== TRACE RESEARCH SYSTEM ===")
 
-    if not question:
-        print("Please enter a question.")
-        return
+    question = input("\nWhat would you like to investigate?\n> ")
 
     try:
-        result = agent.run_sync(question)
+        report, saved_path = run_research(question)
 
-        print("\n--- TRACE RESEARCH RESULTS ---\n")
-        print(result.output)
+        print("\n--- RESEARCH REPORT ---\n")
+        print(report.model_dump_json(indent=2))
+
+        print("\n[VERIFICATION PASSED]")
+        print("Report saved to:", saved_path)
+
+    except ResearchVerificationError as error:
+        print("\n[VERIFICATION FAILED]")
+        print(error)
+        print("\nReport was not saved.")
 
     except Exception as error:
-        print(f"\n[ERROR] {type(error).__name__}: {error}")
+        print("\n[TRACE ERROR]")
+        print(f"{type(error).__name__}: {error}")
 
 
 if __name__ == "__main__":
