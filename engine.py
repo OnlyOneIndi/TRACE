@@ -10,12 +10,15 @@ from pydantic_ai import Agent
 
 from research import search_papers
 from schemas import ResearchReport
+
 from verification import (
     verify_report,
     verify_evidence,
     check_numerical_consistency,
 )
+
 from storage import save_report
+from audit import save_verification_audit
 
 
 # ─────────────────────────────────────────
@@ -31,7 +34,7 @@ MODEL_NAME = os.getenv(
 
 
 # ─────────────────────────────────────────
-# CUSTOM ERROR
+# CUSTOM EXCEPTIONS
 # ─────────────────────────────────────────
 
 class ResearchVerificationError(Exception):
@@ -40,7 +43,7 @@ class ResearchVerificationError(Exception):
 
 
 # ─────────────────────────────────────────
-# RESEARCH ENGINE
+# MAIN RESEARCH ENGINE
 # ─────────────────────────────────────────
 
 def run_research(
@@ -49,25 +52,24 @@ def run_research(
     from_year: int | None = None,
 ) -> tuple[ResearchReport, Path]:
     """
-    Run the complete Trace research workflow.
+    Run Trace's complete research workflow.
 
-    Args:
-        question:
-            User's research question.
-
-        max_papers:
-            Maximum papers allowed in each search
-            and in the final report.
-
-        from_year:
-            Optional minimum publication year.
-
-    Returns:
-        Validated research report and saved file path.
+    Workflow:
+        1. Validate research settings.
+        2. Initialize Gemini.
+        3. Search OpenAlex.
+        4. Generate a structured report.
+        5. Restore authoritative source metadata.
+        6. Enforce research constraints.
+        7. Verify metadata and evidence.
+        8. Check numerical consistency.
+        9. Save the verified report.
+       10. Create a verification audit.
+       11. Return the report and file path.
     """
 
     # ─────────────────────────────────────
-    # 1. VALIDATE USER INPUT
+    # 1. VALIDATE RESEARCH INPUT
     # ─────────────────────────────────────
 
     question = question.strip()
@@ -75,6 +77,11 @@ def run_research(
     if not question:
         raise ValueError(
             "Research question cannot be empty."
+        )
+
+    if not isinstance(max_papers, int):
+        raise ValueError(
+            "Maximum papers must be an integer."
         )
 
     if not 1 <= max_papers <= 10:
@@ -85,13 +92,14 @@ def run_research(
     current_year = datetime.now().year
 
     if from_year is not None:
-        if not 1900 <= from_year <= current_year:
+        if (
+            not isinstance(from_year, int)
+            or not 1900 <= from_year <= current_year
+        ):
             raise ValueError(
                 "Invalid earliest publication year."
             )
 
-    # Preserve user settings separately from
-    # arguments the model may pass to the tool.
     user_max_papers = max_papers
     user_from_year = from_year
 
@@ -99,7 +107,7 @@ def run_research(
     search_failed = False
 
     # ─────────────────────────────────────
-    # 2. INITIALIZE RESEARCH AGENT
+    # 2. INITIALIZE GEMINI AGENT
     # ─────────────────────────────────────
 
     agent = Agent(
@@ -113,37 +121,47 @@ def run_research(
 
             "Use only academic papers returned by the tool. "
 
-            "Preserve original source URLs exactly. "
+            "Preserve the exact source URLs returned "
+            "by OpenAlex. "
 
-            "Do not invent titles, years, citation counts, "
-            "or academic references. "
+            "Do not invent research paper titles, "
+            "publication years, citation counts, "
+            "or references. "
 
-            "Summarize each paper using its abstract. "
+            "Summarize each paper based on its "
+            "retrieved abstract. "
 
             "For every key finding, provide a claim, "
-            "an evidence passage, and the source URL. "
+            "an evidence passage, and a source URL. "
 
-            "Evidence passages must be copied verbatim "
-            "from the retrieved abstracts. "
+            "Every evidence passage must be copied "
+            "verbatim from a retrieved paper abstract. "
 
-            "Do not paraphrase the evidence passages. "
+            "Do not paraphrase, alter, or fabricate "
+            "evidence passages. "
 
-            "Claims must be consistent with the "
-            "supporting evidence. "
+            "Associate each finding with the correct "
+            "source paper URL. "
 
-            "Keep numerical values consistent with evidence. "
+            "Ensure claims are consistent with "
+            "the supporting evidence. "
 
-            "Do not invent results when evidence is missing. "
+            "Keep numerical values consistent with "
+            "the evidence passages. "
 
-            "The research tool applies the user's maximum "
-            "paper count and publication-year settings. "
+            "Do not invent evidence for papers "
+            "that have no abstracts. "
 
-            "Do not include papers outside those constraints."
+            "Respect the user's maximum paper count "
+            "and earliest publication-year settings. "
+
+            "If reliable evidence is unavailable, "
+            "do not fabricate a research conclusion."
         ),
     )
 
     # ─────────────────────────────────────
-    # 3. OPENALEX SEARCH TOOL
+    # 3. REGISTER OPENALEX TOOL
     # ─────────────────────────────────────
 
     @agent.tool_plain
@@ -157,17 +175,15 @@ def run_research(
 
         Args:
             query: Search keywords.
-            max_results: Suggested number of papers.
-            from_year: Suggested earliest publication year.
+            max_results: Model-suggested paper count.
+            from_year: Model-suggested earliest year.
         """
 
         nonlocal search_failed
 
-        # The user controls the maximum.
+        # User settings take priority.
         effective_max = user_max_papers
 
-        # Explicit user year takes priority.
-        # Otherwise, the model can suggest one.
         effective_year = (
             user_from_year
             if user_from_year is not None
@@ -192,31 +208,38 @@ def run_research(
 
             search_failed = True
 
-            return [{"error": str(error)}]
+            return [
+                {
+                    "error": str(error)
+                }
+            ]
 
     # ─────────────────────────────────────
-    # 4. RUN RESEARCH
+    # 4. EXECUTE RESEARCH
     # ─────────────────────────────────────
+
+    configured_question = (
+        f"{question}\n\n"
+        "Research configuration:\n"
+        f"- Maximum papers in final report: "
+        f"{user_max_papers}\n"
+        f"- Earliest publication year: "
+        f"{user_from_year if user_from_year is not None else 'Not specified'}\n"
+        "Use only the retrieved academic papers."
+    )
 
     result = agent.run_sync(
-        (
-            f"{question}\n\n"
-            f"Research configuration:\n"
-            f"- Maximum papers in final report: "
-            f"{user_max_papers}\n"
-            f"- Earliest publication year: "
-            f"{user_from_year if user_from_year is not None else 'Not specified'}\n"
-            "Use only retrieved academic sources."
-        )
+        configured_question
     )
 
     report = result.output
 
     # ─────────────────────────────────────
-    # 5. CHECK RETRIEVAL
+    # 5. CHECK RETRIEVED SOURCES
     # ─────────────────────────────────────
 
     if search_failed or not retrieved_papers:
+
         raise ResearchVerificationError(
             "No reliable OpenAlex records were retrieved."
         )
@@ -237,7 +260,8 @@ def run_research(
         )
 
         if original is None:
-            # Unknown URLs must fail verification.
+            # Unknown source URLs will still
+            # fail metadata verification.
             continue
 
         paper.title = original["title"]
@@ -251,17 +275,20 @@ def run_research(
     constraint_errors = []
 
     if len(report.papers) > user_max_papers:
+
         constraint_errors.append(
-            f"Report contains {len(report.papers)} papers, "
-            f"but the maximum is {user_max_papers}."
+            f"Report contains {len(report.papers)} "
+            f"papers, but the maximum is "
+            f"{user_max_papers}."
         )
 
     if user_from_year is not None:
 
         for paper in report.papers:
 
-            # Check only matching source records.
-            original = sources_by_url.get(paper.url)
+            original = sources_by_url.get(
+                paper.url
+            )
 
             if original is None:
                 continue
@@ -270,14 +297,15 @@ def run_research(
                 original["year"] is None
                 or original["year"] < user_from_year
             ):
+
                 constraint_errors.append(
                     f"Paper does not meet the "
-                    f"{user_from_year}+ year requirement: "
+                    f"{user_from_year}+ requirement: "
                     f"{paper.title}"
                 )
 
     # ─────────────────────────────────────
-    # 8. VERIFY PAPER METADATA
+    # 8. VERIFY SOURCE METADATA
     # ─────────────────────────────────────
 
     metadata_errors = verify_report(
@@ -286,7 +314,7 @@ def run_research(
     )
 
     # ─────────────────────────────────────
-    # 9. VERIFY EVIDENCE
+    # 9. VERIFY EVIDENCE PASSAGES
     # ─────────────────────────────────────
 
     evidence_errors = verify_evidence(
@@ -295,6 +323,7 @@ def run_research(
     )
 
     if not report.key_findings:
+
         evidence_errors.append(
             "No evidence-backed findings were provided."
         )
@@ -303,12 +332,12 @@ def run_research(
     # 10. CHECK NUMERICAL CONSISTENCY
     # ─────────────────────────────────────
 
-    numerical_warnings = check_numerical_consistency(
-        report=report
+    numerical_warnings = (
+        check_numerical_consistency(report)
     )
 
     # ─────────────────────────────────────
-    # 11. COLLECT VERIFICATION PROBLEMS
+    # 11. EVALUATE VERIFICATION RESULTS
     # ─────────────────────────────────────
 
     problems = (
@@ -319,14 +348,62 @@ def run_research(
     )
 
     if problems:
+
         raise ResearchVerificationError(
             "\n".join(problems)
         )
+
+    # Record exactly which checks passed.
+    checks = {
+        "research_constraints": (
+            len(constraint_errors) == 0
+        ),
+        "source_metadata": (
+            len(metadata_errors) == 0
+        ),
+        "evidence_quotations": (
+            len(evidence_errors) == 0
+        ),
+        "numerical_consistency": (
+            len(numerical_warnings) == 0
+        ),
+    }
 
     # ─────────────────────────────────────
     # 12. SAVE VERIFIED REPORT
     # ─────────────────────────────────────
 
     saved_path = save_report(report)
+
+    # ─────────────────────────────────────
+    # 13. SAVE VERIFICATION AUDIT
+    # ─────────────────────────────────────
+
+    try:
+
+        save_verification_audit(
+            report_path=saved_path,
+            retrieved_papers=retrieved_papers,
+            max_papers=user_max_papers,
+            from_year=user_from_year,
+            checks=checks,
+        )
+
+    except Exception as error:
+
+        # Keep the report and audit consistent:
+        # if the audit cannot be created, remove
+        # the newly generated report.
+        saved_path.unlink(missing_ok=True)
+
+        raise RuntimeError(
+            "Report passed verification, but its "
+            "audit record could not be saved. "
+            "The newly saved report was removed."
+        ) from error
+
+    # ─────────────────────────────────────
+    # 14. RETURN VERIFIED RESULTS
+    # ─────────────────────────────────────
 
     return report, saved_path

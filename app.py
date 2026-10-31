@@ -1,10 +1,10 @@
-
+from audit import load_verification_audit
 import json
 from datetime import datetime
 
 import streamlit as st
 
-from engine import run_research, ResearchVerificationError
+from planned_engine import run_research, ResearchVerificationError
 from storage import list_saved_reports, load_report
 from provenance import build_provenance
 
@@ -584,6 +584,84 @@ if report is not None:
         st.caption("NEW RESEARCH / CHECKS PASSED")
 
     st.header(report.topic)
+
+    # ─────────────────────────────────────
+    # VERIFICATION AUDIT DISPLAY
+    # ─────────────────────────────────────
+
+    saved_path = st.session_state.saved_path
+
+    if saved_path is not None:
+
+        try:
+            audit = load_verification_audit(
+                saved_path
+            )
+
+            if audit is None:
+                st.caption(
+                    "AUDIT RECORD UNAVAILABLE — "
+                    "THIS MAY BE AN OLDER REPORT"
+                )
+
+            elif not audit["report_unchanged"]:
+                st.error(
+                    "Report integrity warning: "
+                    "the saved report does not match "
+                    "its verification audit."
+                )
+
+            else:
+                with st.expander(
+                    "VIEW VERIFICATION AUDIT"
+                ):
+                    st.success(
+                        "Recorded checks passed. "
+                        "Report fingerprint matches."
+                    )
+
+                    st.write(
+                        "Verified at:",
+                        audit["verified_at"]
+                    )
+
+                    st.write(
+                        "Retrieved sources:",
+                        len(
+                            audit["retrieved_source_urls"]
+                        )
+                    )
+
+                    st.markdown("**Checks performed**")
+
+                    for name, passed in audit[
+                        "checks"
+                    ].items():
+
+                        label = name.replace(
+                            "_", " "
+                        ).title()
+
+                        if passed:
+                            st.write(f"✓ {label}")
+                        else:
+                            st.write(f"✗ {label}")
+
+                    st.markdown("**Limitations**")
+
+                    for limitation in audit[
+                        "limitations"
+                    ]:
+                        st.caption(limitation)
+
+        except Exception as error:
+            st.warning(
+                "The verification audit could not "
+                "be read or validated."
+            )
+
+            with st.expander("Audit error details"):
+                st.code(str(error))
 
     col1, col2, col3 = st.columns(3)
 

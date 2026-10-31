@@ -33,21 +33,24 @@ def save_report(report: ResearchReport) -> Path:
 
 
 def list_saved_reports() -> list[Path]:
-    """Return previously saved reports, newest first."""
+    """Return saved research reports, newest first."""
 
     if not REPORTS_DIR.exists():
         return []
 
-    reports = list(
-        REPORTS_DIR.glob("trace_report_*.json")
-    )
+    reports = [
+        path
+        for path in REPORTS_DIR.glob(
+            "trace_report_*.json"
+        )
+        if not path.name.endswith(".audit.json")
+    ]
 
     return sorted(
         reports,
         key=lambda path: path.stat().st_mtime,
         reverse=True
     )
-
 
 def load_report(filepath: Path) -> ResearchReport:
     """Load and validate a previously saved report."""
